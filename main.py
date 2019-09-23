@@ -34,7 +34,7 @@ agent = PGAgent(state_size=state_size,
                 hidden_size=hidden_size, 
                 action_size=action_size)
 
-scores = agent.train(env, n_episodes=2000)
+scores = agent.train(env, n_episodes=5000)
 
 #import matplotlib.pyplot as plt
 #plt.plot(scores)

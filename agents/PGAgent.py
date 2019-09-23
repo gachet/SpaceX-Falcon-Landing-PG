@@ -32,7 +32,7 @@ class PGAgent:
                  action_size=7, 
                  activ=F.relu, 
                  optim=optim.Adam, 
-                 lr=1e-3):
+                 lr=1e-4):
         
         super(PGAgent, self).__init__()
         self.policy = Policy(state_size, hidden_size, action_size, activ).to(device)
