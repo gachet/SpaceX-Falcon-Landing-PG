@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from torch.distributions import Categorical
 from collections import deque
 
-from .device import  device
+from .device import device
 
 class Policy(nn.Module):
     def __init__(self, state_size, hidden_size, action_size, activ):
@@ -27,12 +27,11 @@ class Policy(nn.Module):
 
 class PGAgent:
     def __init__(self, 
-                 state_size=10, 
+                 state_size, action_size,
                  hidden_size=(32, 64, 128), 
-                 action_size=7, 
                  activ=F.relu, 
                  optim=optim.Adam, 
-                 lr=1e-4):
+                 lr=1e-3):
         
         super(PGAgent, self).__init__()
         self.policy = Policy(state_size, hidden_size, action_size, activ).to(device)
@@ -55,13 +54,13 @@ class PGAgent:
         scores_deque = deque(maxlen=100)
         scores = []
         for i_episode in range(1, n_episodes+1):
-            saved_log_probs = []
+            log_probs = []
             rewards = []
             state = env.reset()
             
             for t in range(max_t):
                 action, log_prob = self.act(state)
-                saved_log_probs.append(log_prob)
+                log_probs.append(log_prob)
                 state, reward, done, _ = env.step(action)
                 rewards.append(reward)
                 
@@ -71,16 +70,26 @@ class PGAgent:
             scores_deque.append(sum(rewards))
             scores.append(sum(rewards))
             
-            discounts = [gamma**i for i in range(len(rewards)+1)]
-            R = sum([d*r for d, r in zip(discounts, rewards)])
+            # Normalizing the rewards:
+            rewards = np.array(rewards)
             
-            policy_loss = []
-            for log_prob in saved_log_probs:
-                policy_loss.append(-log_prob * R)
-            policy_loss = torch.cat(policy_loss).sum()
+            mean = rewards.mean()
+            std = rewards.std()
+            std = std if std > 0 else 1
+            
+            rewards = ((rewards - mean) / std).tolist()
+            
+            discounts = [gamma**i for i in range(len(rewards)+1)]
+            R = [d*r for d, r in zip(discounts, rewards)]
+            
+            losses = []
+            for log_prob, r in zip(R, log_probs):
+                losses.append(-log_prob * r)
+                
+            loss = sum(losses)
             
             self.optim.zero_grad()
-            policy_loss.backward()
+            loss.backward()
             self.optim.step()
             
             if i_episode % print_every == 0:

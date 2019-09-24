@@ -28,11 +28,8 @@ env = gym.make('RocketLander-v0')
 
 state_size = env.observation_space.shape[0]
 action_size = env.action_space.n
-hidden_size = (64, 64)
 
-agent = PGAgent(state_size=state_size, 
-                hidden_size=hidden_size, 
-                action_size=action_size)
+agent = PGAgent(state_size, action_size)
 
 scores = agent.train(env, n_episodes=5000)
 
