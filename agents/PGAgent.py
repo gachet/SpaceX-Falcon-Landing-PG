@@ -19,6 +19,8 @@ class Policy(nn.Module):
                                      for dim_in, dim_out \
                                      in zip(dims[:-1], dims[1:])])
         self.activ = activ
+        
+        print(self)
 
     def forward(self, x):
         for layer in self.layers:
@@ -71,20 +73,22 @@ class PGAgent:
             scores.append(sum(rewards))
             
             # Normalizing the rewards:
-            rewards = np.array(rewards)
-            
-            mean = rewards.mean()
-            std = rewards.std()
-            std = std if std > 0 else 1
-            
-            rewards = ((rewards - mean) / std).tolist()
+#            rewards = np.array(rewards)
+#            
+#            mean = rewards.mean()
+#            std = rewards.std() + 1e-5
+#            
+#            rewards = ((rewards - mean) / std).tolist()
             
             discounts = [gamma**r for r in range(len(rewards)+1)]
             G = [d*r for d, r in zip(discounts, rewards)]
             
+            b = np.array(G).mean() # Baseline
+#            b = 0
+            
             losses = []
             for log_prob, g in zip(log_probs, G):
-                losses.append(-log_prob * g)
+                losses.append(-log_prob * (g - b))
                 
             loss = sum(losses)
             
