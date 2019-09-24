@@ -79,12 +79,12 @@ class PGAgent:
             
             rewards = ((rewards - mean) / std).tolist()
             
-            discounts = [gamma**i for i in range(len(rewards)+1)]
-            R = [d*r for d, r in zip(discounts, rewards)]
+            discounts = [gamma**r for r in range(len(rewards)+1)]
+            G = [d*r for d, r in zip(discounts, rewards)]
             
             losses = []
-            for log_prob, r in zip(R, log_probs):
-                losses.append(-log_prob * r)
+            for log_prob, g in zip(log_probs, G):
+                losses.append(-log_prob * g)
                 
             loss = sum(losses)
             
