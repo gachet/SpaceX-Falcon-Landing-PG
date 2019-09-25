@@ -19,8 +19,6 @@ class Policy(nn.Module):
                                      for dim_in, dim_out \
                                      in zip(dims[:-1], dims[1:])])
         self.activ = activ
-        
-        print(self)
 
     def forward(self, x):
         for layer in self.layers:
@@ -42,9 +40,9 @@ class PGAgent:
     def act(self, state):
         state = torch.from_numpy(state).float().unsqueeze(0).to(device)
         probs = self.policy(state).cpu()
-        m = Categorical(probs)
-        action = m.sample()
-        return action.item(), m.log_prob(action)
+        dist = Categorical(probs)
+        action = dist.sample()
+        return action.item(), dist.log_prob(action), dist.entropy()
     
     def train(self, 
               env, 
@@ -57,12 +55,14 @@ class PGAgent:
         scores = []
         for i_episode in range(1, n_episodes+1):
             log_probs = []
+            entropies = []
             rewards = []
             state = env.reset()
             
             for t in range(max_t):
-                action, log_prob = self.act(state)
+                action, log_prob, entropy = self.act(state)
                 log_probs.append(log_prob)
+                entropies.append(entropy)
                 state, reward, done, _ = env.step(action)
                 rewards.append(reward)
                 
@@ -87,10 +87,11 @@ class PGAgent:
 #            b = 0
             
             losses = []
-            for log_prob, g in zip(log_probs, G):
-                losses.append(-log_prob * (g - b))
+            for log_prob, entropy, g in zip(log_probs, entropies, G):
+                losses.append(-log_prob * (g - b) - (0.01 * entropy))
                 
-            loss = sum(losses)
+#            loss = torch.cat(losses).sum() - (0.01 * entropy.mean())
+            loss = torch.cat(losses).sum()
             
             self.optim.zero_grad()
             loss.backward()
