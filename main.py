@@ -3,51 +3,26 @@ import gym
 import gym.spaces
 import rocket_lander_gym
 
-from agents.PGAgent import PGAgent
-from agents.ActorCriticAgent import ActorCriticAgent
+from agents.pg_agent import PGAgent
+from agents.actor_critic_agent import ActorCriticAgent
+from agents.multi_processing_env import SubprocVecEnv
+from utils import make_env
 
-env = gym.make('RocketLander-v0')
-#env = gym.make('CartPole-v0')
+num_envs = 16
+env_name = "RocketLander-v0" # RocketLander-v0 | CartPole-v0
 
-torch.manual_seed(123)
-env.seed(123)
+envs = [make_env(env_name) for i in range(num_envs)]
+envs = SubprocVecEnv(envs)
 
-#env.reset()
-#
-#PRINT_DEBUG_MSG = True
-#
-#while True:
-#    env.render()
-#    action = env.action_space.sample()
-#    observation,reward,done,info = env.step(action)
-#
-#    if PRINT_DEBUG_MSG:
-#        print("Action Taken  ",action)
-#        print("Observation   ",observation)
-#        print("Reward Gained ",reward)
-#        print("Info          ",info,end='\n\n')
-#
-#    if done:
-#        print("Simulation done.")
-#        break
-#
-#env.close()
-
-state_size = env.observation_space.shape[0]
-action_size = env.action_space.n
-
-#agent = PGAgent(state_size, 
-#                action_size, 
-#                hidden_size=(20,), 
-#                activ=torch.tanh,
-#                lr=1e-4)
+state_size = envs.observation_space.shape[0]
+action_size = envs.action_space.n
 
 agent = ActorCriticAgent(state_size, action_size)
 
-scores = agent.train(env)
+scores = agent.train(envs)
 
-import matplotlib.pyplot as plt
-plt.plot(scores)
+#import matplotlib.pyplot as plt
+#plt.plot(scores)
 
 #env.reset()
 #
