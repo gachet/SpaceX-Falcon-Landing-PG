@@ -57,6 +57,7 @@ class PGAgent:
             log_probs = []
             entropies = []
             rewards = []
+            dones = []
             state = env.reset()
             
             for t in range(max_t):
@@ -65,6 +66,7 @@ class PGAgent:
                 entropies.append(entropy)
                 state, reward, done, _ = env.step(action)
                 rewards.append(reward)
+                dones.append(True if done else False)
                 
                 if done:
                     break
@@ -81,17 +83,19 @@ class PGAgent:
 #            rewards = ((rewards - mean) / std).tolist()
             
             discounts = [gamma**r for r in range(len(rewards)+1)]
-            G = [d*r for d, r in zip(discounts, rewards)]
+            G = [d*r if not d else 0 for d, r, d in zip(discounts, rewards, dones)]
             
             b = np.array(G).mean() # Baseline
 #            b = 0
             
             losses = []
             for log_prob, entropy, g in zip(log_probs, entropies, G):
-                losses.append(-log_prob * (g - b) - (0.01 * entropy))
-                
-#            loss = torch.cat(losses).sum() - (0.01 * entropy.mean())
-            loss = torch.cat(losses).sum()
+#                losses.append(-(log_prob * (g - b) - (0.01 * entropy)))
+                losses.append(-(log_prob * (g - b)))
+            
+            pg_entropy = 0.01 * torch.cat(entropies).mean()
+            pg_loss = torch.cat(losses).sum()
+            loss = pg_loss - pg_entropy
             
             self.optim.zero_grad()
             loss.backward()

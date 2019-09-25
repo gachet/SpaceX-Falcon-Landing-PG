@@ -4,10 +4,13 @@ import gym.spaces
 import rocket_lander_gym
 
 from agents.PGAgent import PGAgent
+from agents.ActorCriticAgent import ActorCriticAgent
 
-#env = gym.make('RocketLander-v0')
-env = gym.make('CartPole-v0')
-env.seed(0)
+env = gym.make('RocketLander-v0')
+#env = gym.make('CartPole-v0')
+
+torch.manual_seed(123)
+env.seed(123)
 
 #env.reset()
 #
@@ -33,13 +36,15 @@ env.seed(0)
 state_size = env.observation_space.shape[0]
 action_size = env.action_space.n
 
-agent = PGAgent(state_size, 
-                action_size, 
-                hidden_size=(16,), 
-                activ=torch.tanh,
-                lr=1e-2)
+#agent = PGAgent(state_size, 
+#                action_size, 
+#                hidden_size=(20,), 
+#                activ=torch.tanh,
+#                lr=1e-4)
 
-scores = agent.train(env, n_episodes=1000)
+agent = ActorCriticAgent(state_size, action_size)
+
+scores = agent.train(env)
 
 import matplotlib.pyplot as plt
 plt.plot(scores)
