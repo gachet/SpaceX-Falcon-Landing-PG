@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 from torch.distributions import Categorical
 from collections import deque
@@ -12,32 +13,43 @@ class Policy(nn.Module):
     def __init__(self, input_size, output_size, hidden_size):
         super(Policy, self).__init__()
         
-        self.critic = nn.Sequential(
-            nn.Linear(input_size, hidden_size),
-            nn.ReLU(),
-            nn.Linear(hidden_size, 1)
-        )
+#        self.critic = nn.Sequential(
+#            nn.Linear(input_size, hidden_size),
+#            nn.ReLU(),
+#            nn.Linear(hidden_size, 1)
+#        )
+#        
+#        self.actor = nn.Sequential(
+#            nn.Linear(input_size, hidden_size),
+#            nn.ReLU(),
+#            nn.Linear(hidden_size, output_size),
+#            nn.Softmax(dim=1),
+#        )
         
-        self.actor = nn.Sequential(
-            nn.Linear(input_size, hidden_size),
-            nn.ReLU(),
-            nn.Linear(hidden_size, output_size),
-            nn.Softmax(dim=1),
-        )
+        self.affine = nn.Linear(input_size, hidden_size)
+        self.action = nn.Linear(hidden_size, output_size)
+        self.value = nn.Linear(hidden_size, 1)
         
-    def forward(self, x):
-        value = self.critic(x)
-        probs = self.actor(x)
-        dist  = Categorical(probs)
-        return dist, value
+    def forward(self, state):
+        
+#        value = self.critic(state)
+#        probs = self.actor(state)
+#        
+#        return probs, value
+        
+        state = F.relu(self.affine(state))
+        probs = F.softmax(self.action(state), dim=1)
+        value = self.value(state)
+        
+        return probs, value
 
 
 class ActorCriticAgent:
     def __init__(self, 
                  state_size, action_size,
-                 hidden_size=256,
+                 hidden_size=16,
                  optim=optim.Adam, 
-                 lr=3e-4):
+                 lr=1e-2):
         
         super(ActorCriticAgent, self).__init__()
         self.policy = Policy(state_size, 
@@ -47,7 +59,8 @@ class ActorCriticAgent:
     
     def act(self, state):
         state = torch.FloatTensor(state).to(device)
-        dist, value = self.policy(state)
+        probs, value = self.policy(state)
+        dist  = Categorical(probs)
         action = dist.sample()
         return action, value, dist
     
@@ -56,7 +69,9 @@ class ActorCriticAgent:
               n_episodes=2000,
               max_t=1000, 
               gamma=.99, 
-              print_every=50):
+              coef_ent=0.01, 
+              coef_val=0.25, 
+              print_every=100):
 
         scores_deque = deque(maxlen=100)
         
@@ -87,27 +102,31 @@ class ActorCriticAgent:
                 
                 state = next_state
             
+            scores = scores / max_t
             scores_deque.append(scores)
             
-            next_state = torch.FloatTensor(next_state).to(device)
-            _, next_value = self.policy(next_state)
+#            next_state = torch.FloatTensor(next_state).to(device)
+#            _, next_value = self.policy(next_state)
             
-            R = next_value
+            discounts = [gamma**i for i in range(len(rewards)+1)]
+            
+#            R = next_value
+            R = 0
             returns = []
             for i in reversed(range(len(rewards))):
-                R = rewards[i] + gamma * R * masks[i]
+                R = rewards[i] + discounts[i] * R * masks[i]
                 returns.insert(0, R)
             
             log_probs = torch.cat(log_probs)
-            returns = torch.cat(returns)
+            returns = torch.cat(returns).detach()
             values = torch.cat(values)
             
             advantage = returns - values
             
-            actor_loss  = -(log_probs * advantage).mean()
+            actor_loss  = -(log_probs * advantage.detach()).mean()
             critic_loss = advantage.pow(2).mean()
             
-            loss = actor_loss + critic_loss - 0.001 * entropy
+            loss = actor_loss + (coef_val * critic_loss) - (coef_ent * entropy)
             
             self.optim.zero_grad()
             loss.backward()
