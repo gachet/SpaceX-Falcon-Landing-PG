@@ -108,13 +108,14 @@ class ActorCriticAgent:
 #            next_state = torch.FloatTensor(next_state).to(device)
 #            _, next_value = self.policy(next_state)
             
-            discounts = [gamma**i for i in range(len(rewards)+1)]
+#            discounts = [gamma**i for i in range(len(rewards)+1)]
             
 #            R = next_value
             R = 0
             returns = []
             for i in reversed(range(len(rewards))):
-                R = rewards[i] + discounts[i] * R * masks[i]
+#                R = rewards[i] + discounts[i] * R * masks[i]
+                R = rewards[i] + gamma * R * masks[i]
                 returns.insert(0, R)
             
             log_probs = torch.cat(log_probs)
