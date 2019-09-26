@@ -47,7 +47,7 @@ class Policy(nn.Module):
 class ActorCriticAgent:
     def __init__(self, 
                  state_size, action_size,
-                 hidden_size=16,
+                 hidden_size=64,
                  optim=optim.Adam, 
                  lr=1e-2):
         
@@ -66,7 +66,7 @@ class ActorCriticAgent:
     
     def train(self, 
               envs, 
-              n_episodes=2000,
+              n_episodes=1000,
               max_t=1000, 
               gamma=.99, 
               coef_ent=0.01, 
@@ -79,6 +79,7 @@ class ActorCriticAgent:
             
             log_probs = []
             values = []
+            entropies = []
             rewards = []
             masks = []
             entropy = 0
@@ -89,9 +90,9 @@ class ActorCriticAgent:
             for t in range(max_t):
                 action, value, dist = self.act(state)
                 
-                log_probs.append(dist.log_prob(action))
+                log_probs.append(dist.log_prob(action).unsqueeze(-1))
                 values.append(value)
-                entropy += dist.entropy().mean()
+                entropies.append(dist.entropy().unsqueeze(-1))
                 
                 next_state, reward, done, _ = envs.step(action.cpu().numpy())
                 
@@ -105,36 +106,35 @@ class ActorCriticAgent:
             scores = scores / max_t
             scores_deque.append(scores)
             
-#            next_state = torch.FloatTensor(next_state).to(device)
-#            _, next_value = self.policy(next_state)
+            next_state = torch.FloatTensor(next_state).to(device)
+            _, next_value = self.policy(next_state)
             
-#            discounts = [gamma**i for i in range(len(rewards)+1)]
+            advantages = torch.tensor(np.zeros((5, 1)))
+            returns = next_value.detach()
+            for i in reversed(range(max_t)):
+                returns = rewards[i] + gamma * returns * masks[i]
+                advantages = returns - values[i].detach()
             
-#            R = next_value
-            R = 0
-            returns = []
-            for i in reversed(range(len(rewards))):
-#                R = rewards[i] + discounts[i] * R * masks[i]
-                R = rewards[i] + gamma * R * masks[i]
-                returns.insert(0, R)
+            log_probs = torch.cat(log_probs).view(5, -1)
+            values = torch.cat(values).view(5, -1)
+            entropies = torch.cat(entropies).view(5, -1)
             
-            log_probs = torch.cat(log_probs)
-            returns = torch.cat(returns).detach()
-            values = torch.cat(values)
+            actor_loss  = -(log_probs * advantages).mean()
+            critic_loss = (returns - values).pow(2).mean()
+            entropy_loss = entropies.mean()
             
-            advantage = returns - values
-            
-            actor_loss  = -(log_probs * advantage.detach()).mean()
-            critic_loss = advantage.pow(2).mean()
-            
-            loss = actor_loss + (coef_val * critic_loss) - (coef_ent * entropy)
+            loss = actor_loss + (coef_val * critic_loss) - (coef_ent * entropy_loss)
             
             self.optim.zero_grad()
             loss.backward()
             self.optim.step()
             
             if i_episode % print_every == 0:
-                print('Episode {}\tAverage Score: {:.2f}'.format(i_episode, np.mean(scores_deque)))
+                print('Episode {}\tAverage Score: {:.2f}\tActor loss: {:.2f}\tCritic loss: {:.2f}'\
+                      .format(i_episode, 
+                              np.mean(scores_deque), 
+                              actor_loss, 
+                              critic_loss))
         
         envs.close()
             
