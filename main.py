@@ -1,7 +1,7 @@
 import torch
 import rocket_lander_gym
 from utils import multi_env, run_env
-from agents.actor_critic_agent import ActorCriticAgent
+from agents.a2c_agent import A2CAgent
 
 num_envs = 1
 env_name = 'CartPole-v0' # RocketLander-v0 | MountainCar-v0 | CartPole-v0
@@ -11,18 +11,15 @@ envs = multi_env(env_name, num_envs)
 state_size = envs.observation_space.shape[0]
 action_size = envs.action_space.n
 
-agent = ActorCriticAgent(state_size, action_size, hidden_size=256, lr=1e-3)
+agent = A2CAgent(state_size, action_size, hidden_size=256, lr=1e-3)
 
 scores = agent.train(envs, 
                      max_t=1000, 
                      coef_val=0.25, 
                      coef_ent=0.01)
 
-
-
-
-
 torch.save(agent.policy.state_dict(), 'policy_weights.pth')
+
 agent.policy.load_state_dict(torch.load('policy_weights.pth'))
 
 #def get_action(state):

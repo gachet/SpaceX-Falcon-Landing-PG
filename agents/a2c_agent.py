@@ -42,14 +42,14 @@ class Policy(nn.Module):
         return probs, value
 
 
-class ActorCriticAgent:
+class A2CAgent:
     def __init__(self, 
                  state_size, action_size,
                  hidden_size=64,
                  optim=optim.Adam, 
                  lr=1e-3):
         
-        super(ActorCriticAgent, self).__init__()
+        super(A2CAgent, self).__init__()
         
         self.policy = Policy(state_size, 
                              action_size, 
