@@ -17,32 +17,25 @@ def layer_init(layer, w_scale=1.0):
 class Policy(nn.Module):
     def __init__(self, input_size, output_size, hidden_size):
         super(Policy, self).__init__()
-#        self.affine = nn.Linear(input_size, hidden_size)
-#        self.action = nn.Linear(hidden_size, output_size)
-#        self.value = nn.Linear(hidden_size, 1)
         
         self.critic = nn.Sequential(
-            layer_init(nn.Linear(input_size, hidden_size)),
-            nn.Tanh(),
-#            layer_init(nn.Linear(hidden_size, hidden_size)),
-#            nn.Tanh(),
-            layer_init(nn.Linear(hidden_size, 1))
+            nn.Linear(input_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, 1)
         )
         
         self.actor = nn.Sequential(
-            layer_init(nn.Linear(input_size, hidden_size)),
-            nn.Tanh(),
-#            layer_init(nn.Linear(hidden_size, hidden_size)),
-#            nn.Tanh(),
-            layer_init(nn.Linear(hidden_size, output_size)),
+            nn.Linear(input_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, output_size),
             nn.Softmax(dim=1),
         )
         
-    def forward(self, state):
-#        state = F.relu(self.affine(state))
-#        probs = F.softmax(self.action(state), dim=1)
-#        value = self.value(state)
-        
+    def forward(self, state):        
         value = self.critic(state)
         probs = self.actor(state)
         
@@ -140,14 +133,20 @@ class ActorCriticAgent:
             loss.backward()
             self.optim.step()
             
+            score_mean = np.mean(scores_deque)
+            
             if i_episode % print_every == 0:
                 print('Episode {}\tAverage Score: {:.3f}\tActor loss: {:.3f}\tCritic loss: {:.3f}\tEntropy loss: {:.3f}\tTotal loss: {:.3f}'\
                       .format(i_episode, 
-                              np.mean(scores_deque), 
+                              score_mean, 
                               actor_loss, 
                               critic_loss, 
                               entropy_loss,
                               loss))
+            
+            if score_mean >= 195.0:
+                print('Environment solved in {:d} episodes!\tAverage Score: {:.2f}'.format(i_episode-100, score_mean))
+                break
         
         envs.close()
             
