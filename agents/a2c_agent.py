@@ -14,73 +14,71 @@ def layer_init(layer, w_scale=1.0):
     nn.init.constant_(layer.bias.data, 0)
     return layer
 
-class Policy(nn.Module):
-    def __init__(self, input_size, output_size, hidden_size):
-        super(Policy, self).__init__()
+class Actor(nn.Module):
+    def __init__(self, state_size, action_size, hidden_size, activ=F.tanh):
         
-        self.critic = nn.Sequential(
-            nn.Linear(input_size, hidden_size),
-            nn.BatchNorm1d(hidden_size),
-            nn.Tanh(),
-            nn.Dropout(.3),
-            nn.Linear(hidden_size, hidden_size),
-            nn.BatchNorm1d(hidden_size),
-            nn.Tanh(),
-            nn.Dropout(.3),
-            nn.Linear(hidden_size, 1),
-        )
+        super(Actor, self).__init__()
         
-        self.actor = nn.Sequential(
-            nn.Linear(input_size, hidden_size),
-            nn.BatchNorm1d(hidden_size),
-            nn.Tanh(),
-            nn.Dropout(.3),
-            nn.Linear(hidden_size, hidden_size),
-            nn.BatchNorm1d(hidden_size),
-            nn.Tanh(),
-            nn.Dropout(.3),
-            nn.Linear(hidden_size, output_size),
-            nn.Softmax(dim=1),
-        )
+        dims = (state_size,) + hidden_size + (action_size,)
         
-    def forward(self, state):        
-        value = self.critic(state)
-        probs = self.actor(state)
+        self.layers = nn.ModuleList([nn.Linear(dim_in, dim_out) \
+                                     for dim_in, dim_out \
+                                     in zip(dims[:-1], dims[1:])])
+        self.activ = activ
+
+    def forward(self, x):
+        for layer in self.layers:
+            x = self.activ(layer(x))
+        return F.softmax(x, dim=1)
+
+class Critic(nn.Module):
+    def __init__(self, state_size, hidden_size, activ=F.tanh):
         
-        return probs, value
+        super(Critic, self).__init__()
+        
+        dims = (state_size,) + hidden_size + (1,)
+        
+        self.layers = nn.ModuleList([nn.Linear(dim_in, dim_out) \
+                                     for dim_in, dim_out \
+                                     in zip(dims[:-1], dims[1:])])
+        self.activ = activ
+
+    def forward(self, x):
+        for layer in self.layers:
+            x = self.activ(layer(x))
+        return x
 
 
 class A2CAgent:
-    def __init__(self, 
-                 state_size, action_size,
-                 hidden_size=64,
-                 optim=optim.RMSprop, 
-                 lr=7e-4, 
-                 alpha=0.99,
-                 eps=1e-5):
+    def __init__(self, state_size, action_size):
         
         super(A2CAgent, self).__init__()
         
-        self.policy = Policy(state_size, 
-                             action_size, 
-                             hidden_size=hidden_size).to(device)
+        self.policy = Actor(state_size, 
+                            action_size, 
+                            hidden_size=(64,))
         
-        self.optim = optim(self.policy.parameters(), 
-                           lr=lr, 
-                           alpha=alpha,
-                           eps=eps)
+        self.value = Critic(state_size, 
+                            hidden_size=(64,))
+        
+        self.policy_optim = optim.Adam(self.policy.parameters(), lr=1e-3)
+        self.value_optim = optim.Adam(self.value.parameters(), lr=1e-3)
     
     def act(self, state):
         state = torch.FloatTensor(state).to(device)
-        probs, value = self.policy(state)
+        
+        probs = self.policy(state)
+        value = self.value(state)
+        
         dist  = Categorical(probs)
         action = dist.sample()
+        
         return action, value, dist
     
     def train(self, 
               envs, 
               n_episodes=2000,
-              max_t=1000, 
+              max_steps=1000, 
               steps=5,
               gamma=.99, 
               coef_ent=.01, 
@@ -97,7 +95,7 @@ class A2CAgent:
             scores = 0
             state = envs.reset()
             
-            for t in range(max_t):
+            for t in range(max_steps):
                 
                 log_probs = []
                 values = []
@@ -126,9 +124,9 @@ class A2CAgent:
                         break
             
                 next_state = torch.FloatTensor(next_state).to(device)
-                _, next_value = self.policy(next_state)
+                next_value = self.value(next_state)
                 
-                # return = R + yV(s)
+                # return = R + γV(s)
                 returns = next_value.detach()
                 for i in reversed(range(len(rewards))):
                     returns = rewards[i] + gamma * returns * masks[i]
@@ -137,7 +135,7 @@ class A2CAgent:
                 values = torch.cat(values).view(num_envs, -1)
                 entropies = torch.cat(entropies).view(num_envs, -1)
                 
-                # advantage = R + yV(s') - V(s)
+                # advantage = R + γV(s') - V(s)
                 advantage = returns - values.detach()
                 
                 # A2C losses
@@ -145,14 +143,18 @@ class A2CAgent:
                 value_loss = (returns - values).pow(2).mean()
                 policy_ent = entropies.mean()
                 
-                loss = policy_loss + (coef_val * value_loss) + (coef_ent * policy_ent)
+#                loss = policy_loss + (coef_val * value_loss.detach()) - (coef_ent * policy_ent)
+                loss = policy_loss - (coef_ent * policy_ent)
                 
-                self.optim.zero_grad()
+                self.policy_optim.zero_grad()
                 loss.backward()
+#                nn.utils.clip_grad_norm_(self.policy.parameters(), clip_val)
+                self.policy_optim.step()
                 
-                grad_norm = nn.utils.clip_grad_norm_(self.policy.parameters(), clip_val)
-                
-                self.optim.step()
+                self.value_optim.zero_grad()
+                value_loss.backward()
+#                nn.utils.clip_grad_norm_(self.value.parameters(), clip_val)
+                self.value_optim.step()
             
                 if done.any():
                     break
@@ -161,13 +163,12 @@ class A2CAgent:
             score_mean = np.mean(scores_deque)
             
             if i_episode % print_every == 0:
-                print('Episode {}\tAverage Score: {:.3f}\tPolicy loss: {:.3f}\tValue loss: {:.3f}\tEntropy: {:.3f}\tTotal loss: {:.3f}\tGrad norm: {:.3f}'\
+                print('Episode {}\tAverage Score: {:.3f}\tPolicy loss: {:.3f}\tValue loss: {:.3f}\tEntropy: {:.3f}\tTotal loss: {:.3f}'\
                       .format(i_episode, 
                               score_mean, 
                               policy_loss, 
                               value_loss, 
                               policy_ent,
-                              grad_norm,
                               loss))
             
             if score_mean >= solved:
