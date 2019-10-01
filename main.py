@@ -10,7 +10,7 @@ from agents.a2c_agent import A2CAgent
 
 config = Config()
 
-#####################################################################
+################################ Training ################################
 
 config.num_envs = 1
 config.env_name = 'RocketLander-v0' # RocketLander-v0 | LunarLander-v2 | MountainCar-v0 | CartPole-v0
@@ -38,7 +38,7 @@ agent.train()
 
 torch.save(agent.policy.state_dict(), 'policy_weights.pth')
 
-#####################################################################
+################################ Running ################################
 
 config.env_name = 'RocketLander-v0' # RocketLander-v0 | LunarLander-v2 | MountainCar-v0 | CartPole-v0
 config.envs = gym.make(config.env_name)
