@@ -4,9 +4,9 @@ from torch.optim import RMSprop
 class Config:
     num_envs = 5
     env_name = 'CartPole-v0'
+    solved_with = 195
     envs = []
     eval_env = None
-    env_solved = 195
     num_episodes = 2000
     rollout = 5
     max_steps = 1000

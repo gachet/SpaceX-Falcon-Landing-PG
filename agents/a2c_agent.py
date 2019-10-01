@@ -117,24 +117,24 @@ class A2CAgent:
         super(A2CAgent, self).__init__()
         self.config = config
         
-#        self.policy = Policy(config.state_dim, 
-#                             config.action_dim, 
-#                             config.hidden_units, 
-#                             config.activ)
+        self.policy = Policy(config.state_dim, 
+                             config.action_dim, 
+                             config.hidden_units, 
+                             config.activ)
         
-        self.policy = Actor(config.state_dim, 
-                            config.action_dim, 
-                            config.hidden_units, 
-                            config.activ)
+#        self.policy = Actor(config.state_dim, 
+#                            config.action_dim, 
+#                            config.hidden_units, 
+#                            config.activ)
+#        
+#        self.value = Critic(config.state_dim, 
+#                            config.hidden_units, 
+#                            config.activ)
         
-        self.value = Critic(config.state_dim, 
-                            config.hidden_units, 
-                            config.activ)
+        self.optim = config.optim(self.policy.parameters(), lr=config.lr)
         
-#        self.optim = config.optim(self.policy.parameters(), lr=config.lr)
-        
-        self.optim_policy = config.optim(self.policy.parameters(), lr=config.lr)
-        self.optim_value = config.optim(self.value.parameters(), lr=config.lr)
+#        self.optim_policy = config.optim(self.policy.parameters(), lr=config.lr)
+#        self.optim_value = config.optim(self.value.parameters(), lr=config.lr)
         
         self.reset()
     
@@ -146,8 +146,8 @@ class A2CAgent:
         self.policy.eval()
         
         with torch.no_grad():
-#            action, _, _, _ = self.policy(state)
-            action, _, _ = self.policy(state)
+            action, _, _, _ = self.policy(state)
+#            action, _, _ = self.policy(state)
         
         self.policy.train()
         
@@ -167,10 +167,10 @@ class A2CAgent:
         masks = []
                 
         for _ in range(config.rollout):
-#            action, log_prob, entropy, value = self.policy(state)
+            action, log_prob, entropy, value = self.policy(state)
             
-            action, log_prob, entropy = self.policy(state)
-            value = self.value(state)
+#            action, log_prob, entropy = self.policy(state)
+#            value = self.value(state)
             
             next_state, reward, done, _ = envs.step(action.cpu().numpy())
             
@@ -184,17 +184,19 @@ class A2CAgent:
             
             state = next_state
             
+            self.total_steps += config.num_envs
+            
             if done.any():
                 break
         
         self.state = state
-#        action, log_prob, entropy, value = self.policy(state)
-        value = self.value(state)
+        action, log_prob, entropy, value = self.policy(state)
+#        value = self.value(state)
         
-        advantages = []
+#        advantages = []
         returns = []
         
-        adv = torch.FloatTensor(np.zeros((num_envs, 1)))
+#        adv = torch.FloatTensor(np.zeros((num_envs, 1)))
         ret = value.detach()
         for i in reversed(range(len(rewards))):
             # returns = R + γV(s)
@@ -202,42 +204,43 @@ class A2CAgent:
             returns.insert(0, ret.detach())
             
             # advantages = R + γV(s') - V(s)
-            adv = ret - values[i].detach()
-            advantages.insert(0, adv.detach())
-            
-            self.total_steps += config.num_envs
+#            adv = ret - values[i].detach()
+#            advantages.insert(0, adv.detach())
         
         log_probs = torch.cat(log_probs)
         values = torch.cat(values)
         returns = torch.cat(returns)
-        advantages = torch.cat(advantages)
+#        advantages = torch.cat(advantages)
         entropies = torch.cat(entropies)
         
-        policy_loss = (-log_probs * advantages).mean()
-        value_loss = (returns - values).pow(2).mean()
+        # advantages = R + γV(s') - V(s)
+        advantages = (returns - values)
+        
+        policy_loss = (-log_probs * advantages.detach()).mean()
+        value_loss = advantages.pow(2).mean()
         entropy_loss = entropies.mean()
         
 #        policy_loss = -(log_probs * advantages).sum()
 #        value_loss = (returns - values).pow(2).sum()
 #        entropy_loss = entropies.sum()
         
-#        loss = (policy_loss - config.ent_weight * entropy_loss + config.val_loss_weight * value_loss)
-        loss = (policy_loss - config.ent_weight * entropy_loss)
+        loss = (policy_loss - config.ent_weight * entropy_loss + config.val_loss_weight * value_loss)
+#        loss = (policy_loss - config.ent_weight * entropy_loss)
         
-#        self.optim.zero_grad()
-#        loss.backward()
-##        nn.utils.clip_grad_norm_(self.policy.parameters(), config.grad_clip)
-#        self.optim.step()
-        
-        self.optim_policy.zero_grad()
+        self.optim.zero_grad()
         loss.backward()
-#        nn.utils.clip_grad_norm_(self.policy.parameters(), config.grad_clip)
-        self.optim_policy.step()
+        nn.utils.clip_grad_norm_(self.policy.parameters(), config.grad_clip)
+        self.optim.step()
         
-        self.optim_value.zero_grad()
-        value_loss.backward()
+#        self.optim_policy.zero_grad()
+#        loss.backward()
+#        nn.utils.clip_grad_norm_(self.policy.parameters(), config.grad_clip)
+#        self.optim_policy.step()
+#        
+#        self.optim_value.zero_grad()
+#        value_loss.backward()
 #        nn.utils.clip_grad_norm_(self.value.parameters(), config.grad_clip)
-        self.optim_value.step()
+#        self.optim_value.step()
         
         return done.any(), policy_loss, value_loss, entropy_loss, loss
     
@@ -256,7 +259,7 @@ class A2CAgent:
             if i_episode % config.log_every == 0:
                 score = self.eval_episode()
                 
-                print('Episode {}\tEval score: {:.2f}\tPolicy loss: {:.3f}\tValue loss: {:.3f}\tEntropy loss: {:.3f}\tTotal loss: {:.3f}'\
+                print('Episode {}\tEval score: {:.2f}\tPolicy loss: {:.2f}\tValue loss: {:.2f}\tEntropy loss: {:.2f}\tTotal loss: {:.2f}'\
                       .format(i_episode, 
                               score, 
                               policy_loss, 
@@ -264,8 +267,8 @@ class A2CAgent:
                               entropy_loss, 
                               loss))
                 
-                if score >= config.env_solved:
-                    print('Environment solved!')
+                if score >= config.solved_with:
+                    print('Environment solved with {:.2f}!'.format(score))
                     break
         
         config.envs.close()
