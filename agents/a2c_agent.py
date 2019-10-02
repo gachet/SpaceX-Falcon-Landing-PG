@@ -116,7 +116,8 @@ class Critic(nn.Module):
         x = torch.FloatTensor(states)
         
         for layer in self.layers:
-            x = self.activ(layer(x))
+            x = layer(x)
+            x = self.activ(x)
             x = F.dropout(x, 0.3)
     
         return x
@@ -253,7 +254,7 @@ class A2CAgent:
         self.optim_policy.step()
         self.optim_value.step()
         
-        return done.any(), policy_loss, value_loss, entropy_loss, loss
+        return done.any(), value_loss, policy_loss, entropy_loss, loss
     
     def train(self):
         config = self.config
@@ -262,7 +263,7 @@ class A2CAgent:
             self.reset()
             
             while self.total_steps <= config.max_steps:
-                done, policy_loss, value_loss, entropy_loss, loss = self.step()
+                done, value_loss, policy_loss, entropy_loss, loss = self.step()
                 
                 if done:
                     break
@@ -270,13 +271,13 @@ class A2CAgent:
             if i_episode % config.log_every == 0:
                 score = self.eval_episode()
                 
-                print('Episode {}\tEval score: {:.2f}\tPolicy loss: {:.2f}\tValue loss: {:.2f}\tEntropy loss: {:.2f}\tLoss: {:.2f}'\
+                print('Episode {}\tValue score: {:.2f}\tPolicy loss: {:.2f}\tEntropy loss: {:.2f}\tLoss loss: {:.2f}\tScore: {:.2f}'\
                       .format(i_episode, 
-                              score, 
+                              value_loss,
                               policy_loss, 
-                              value_loss, 
                               entropy_loss, 
-                              loss))
+                              loss,
+                              score))
                 
                 if score >= config.solved_with:
                     print('Environment solved with {:.2f}!'.format(score))
