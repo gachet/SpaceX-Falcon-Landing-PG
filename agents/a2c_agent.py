@@ -271,7 +271,7 @@ class A2CAgent:
             if i_episode % config.log_every == 0:
                 score = self.eval_episode()
                 
-                print('Episode {}\tValue score: {:.2f}\tPolicy loss: {:.2f}\tEntropy loss: {:.2f}\tLoss loss: {:.2f}\tScore: {:.2f}'\
+                print('Episode {}\tValue loss: {:.2f}\tPolicy loss: {:.2f}\tEntropy loss: {:.2f}\tLoss: {:.2f}\tScore: {:.2f}'\
                       .format(i_episode, 
                               value_loss,
                               policy_loss, 
