@@ -17,29 +17,31 @@ config.envs  = multi_env(config.env_name, config.num_envs)
 config.eval_env = gym.make(config.env_name)
 config.state_dim = config.envs.observation_space.shape[0]
 config.action_dim = config.envs.action_space.n
-config.num_episodes = 5000
-config.rollouts = 5
+config.num_episodes = 2000
+config.steps = 5
 config.max_steps = 1000
-#config.hidden_units = (64, 64)
-config.hidden_actor = (64, 64)
-config.hidden_critic = (64, 64)
-#config.activ = F.tanh
-config.activ_actor = F.tanh
-config.activ_critic = F.tanh
-#config.optim = RMSprop
-config.optim_actor = RMSprop
-config.optim_critic = RMSprop
-#config.lr = 0.001
-config.lr_actor = 0.001
-config.lr_critic = 0.001
-config.gamma = 0.99
-config.ent_weight = 0.25
-#config.val_loss_weight = 0.25
-config.grad_clip = 5
+config.hidden_units = (128,)
+config.hidden_actor = (128,)
+config.hidden_critic = (128,)
+config.activ = torch.tanh
+config.activ_actor = torch.tanh
+config.activ_critic = torch.tanh
+config.optim = Adam
+config.optim_actor = Adam
+config.optim_critic = Adam
+config.lr = 1e-3
+config.lr_actor = 1e-3
+config.lr_critic = 1e-3
+config.gamma = 0.95
+config.ent_weight = 1e-3
+config.val_loss_weight = 1e-3
+config.grad_clip = 1
+config.use_gae = True
+config.lamda = 0.95
 config.log_every = 100
 
 agent = A2CAgent(config)
 
 agent.train()
 
-torch.save(agent.policy.state_dict(), 'policy_weights.pth')
+#torch.save(agent.policy.state_dict(), 'policy_weights.pth')

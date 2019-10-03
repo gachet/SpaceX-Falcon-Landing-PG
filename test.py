@@ -15,7 +15,7 @@ config.envs = gym.make(config.env_name)
 config.state_dim = config.envs.observation_space.shape[0]
 config.action_dim = config.envs.action_space.n
 config.hidden_units = (128,)
-config.activ = F.tanh
+config.activ = torch.tanh
 
 agent = A2CAgent(config)
 

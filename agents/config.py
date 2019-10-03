@@ -2,13 +2,14 @@ import torch.nn.functional as F
 from torch.optim import RMSprop
 
 class Config:
+    seed = 101
     num_envs = 5
     env_name = 'CartPole-v0'
     solved_with = 195
     envs = []
     eval_env = None
     num_episodes = 2000
-    rollouts = 5
+    steps = 5
     max_steps = 1000
     state_dim = 0
     action_dim = 0
@@ -29,4 +30,6 @@ class Config:
     val_loss_weight = 0.5
     grad_clip = 0.5
     log_every = 100
+    use_gae = False
+    lamda = 0.95
     
