@@ -29,7 +29,9 @@ class Config:
     ent_weight = 0.01
     val_loss_weight = 0.5
     grad_clip = 0.5
-    log_every = 100
     use_gae = False
     lamda = 0.95
+    log_every = 100
+    size_score = 100
+    render_eval = False
     
