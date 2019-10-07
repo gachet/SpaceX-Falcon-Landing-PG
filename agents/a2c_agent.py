@@ -160,32 +160,29 @@ class A2CAgent:
         returns = []
         advantages = []
         
-        ret = next_value.detach()
+        R = next_value.detach()
         adv = torch.zeros((num_envs, 1))
         for i in reversed(range(len(rewards))):
-            R = rewards[i]
+            reward = rewards[i]
             value = values[i].detach()
             
             if config.use_gae:
                 value_next = values[i+1].detach()
                 
-                # δ = R + γV(s') - V(s)
-                delta = R + config.gamma * value_next * masks[i] - value
+                # δ = r + γV(s') - V(s)
+                delta = reward + config.gamma * value_next * masks[i] - value
                 
                 # GAE = δ' + λδ
                 adv = delta + config.lamda * config.gamma * adv * masks[i]
-                
-                advantages.insert(0, adv)
-                returns.insert(0, adv + value)
             else:
-                # G = R + γV(s')
-                ret = R + config.gamma * ret * masks[i]
+                # R = r + γV(s')
+                R = reward + config.gamma * R * masks[i]
                 
-                # A(s, a) = R + γV(s') - V(s)
-                adv = ret - value
-                
-                advantages.insert(0, adv)
-                returns.insert(0, ret)
+                # A(s, a) = r + γV(s') - V(s)
+                adv = R - value
+            
+            advantages.insert(0, adv)
+            returns.insert(0, adv + value)
             
         log_probs = torch.cat(log_probs)
         values = torch.cat(values[:-1])

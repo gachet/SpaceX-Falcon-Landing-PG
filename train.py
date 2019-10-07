@@ -34,7 +34,6 @@ config.lr_actor = 1e-3
 config.lr_critic = 1e-3
 config.gamma = 0.99
 config.ent_weight = 1e-3
-config.val_loss_weight = 1e-3
 config.grad_clip = 5
 config.use_gae = True
 config.lamda = 0.95
