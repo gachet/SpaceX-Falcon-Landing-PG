@@ -5,7 +5,7 @@ class Config:
     seed = 101
     num_envs = 5
     env_name = 'CartPole-v0'
-    solved_with = 195
+    env_solved = 195
     envs = []
     eval_env = None
     num_episodes = 2000
@@ -34,4 +34,5 @@ class Config:
     log_every = 100
     size_score = 100
     render_eval = False
+    num_evals = 1
     

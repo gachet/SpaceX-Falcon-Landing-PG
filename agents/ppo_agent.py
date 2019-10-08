@@ -2,34 +2,87 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.distributions import Normal
+from torch.distributions import Categorical
 from collections import deque
 
 from .device import device
 
-class Policy(nn.Module):
-    def __init__(self, state_size, action_size, hidden_size, std=0.0):
-        super(Policy, self).__init__()
+def layer_init(layer, w_scale=1.0):
+    nn.init.orthogonal_(layer.weight.data)
+    layer.weight.data.mul_(w_scale)
+    nn.init.constant_(layer.bias.data, 0)
+    return layer
+
+class Actor(nn.Module):
+    def __init__(self,
+                 state_dim,
+                 action_dim,
+                 hidden_units,
+                 activ):
+        super(Actor, self).__init__()
         
-        self.critic = nn.Sequential(
-            nn.Linear(state_size, hidden_size),
-            nn.ReLU(),
-            nn.Linear(hidden_size, 1)
-        )
+        dims = (state_dim,) + hidden_units + (action_dim,)
         
-        self.actor = nn.Sequential(
-            nn.Linear(state_size, hidden_size),
-            nn.ReLU(),
-            nn.Linear(hidden_size, action_size),
-        )
-        self.log_std = nn.Parameter(torch.ones(1, action_size) * std)
+        self.layers = nn.ModuleList(
+                [layer_init(nn.Linear(dim_in, dim_out)) \
+                 for dim_in, dim_out \
+                 in zip(dims[:-1], dims[1:])])
+    
+        self.activ = activ
         
-    def forward(self, x):
-        value = self.critic(x)
-        mu    = self.actor(x)
-        std   = self.log_std.exp().expand_as(mu)
-        dist  = Normal(mu, std)
-        return dist, value
+        self.to(device)
+
+    def forward(self, states):
+        x = torch.FloatTensor(states).to(device)
+        
+        for layer in self.layers[:-1]:
+            x = self.activ(layer(x))
+        
+        logits = self.layers[-1](x)
+        
+        dist = Categorical(logits=logits)
+        action = dist.sample()
+        
+        log_prob = dist.log_prob(action).unsqueeze(-1)
+        entropy = dist.entropy().unsqueeze(-1)
+        
+        return action, log_prob, entropy
+
+class Critic(nn.Module):
+    def __init__(self,
+                 state_dim,
+                 hidden_units,
+                 activ):
+        super(Critic, self).__init__()
+        
+        dims = (state_dim,) + hidden_units + (1,)
+        
+        layers = [layer_init(nn.Linear(dim_in, dim_out)) \
+                  for dim_in, dim_out \
+                  in zip(dims[:-1], dims[1:])]
+        
+#         batch_norm = [nn.BatchNorm1d(dim_out) for dim_out in dims[1:]]
+        
+        self.layers = nn.ModuleList(layers)
+#         self.batch_norm = nn.ModuleList(batch_norm)
+    
+        self.activ = activ
+        
+        self.to(device)
+
+    def forward(self, states):
+        x = torch.FloatTensor(states).to(device)
+        
+#         for layer, batch_norm in zip(self.layers, self.batch_norm):
+        for layer in self.layers[:-1]:
+            x = layer(x)
+#             x = batch_norm(x)
+            x = self.activ(x)
+#             x = F.dropout(x, 0.5)
+        
+        value = self.layers[-1](x)
+    
+        return value
 
 class PPOAgent:
     def __init__(self, config):
@@ -37,12 +90,19 @@ class PPOAgent:
         super(PPOAgent, self).__init__()
         self.config = config
 
-        self.policy = Policy(config.state_dim, 
-                             config.action_dim, 
-                             config.hidden_units, 
-                             config.activ)
+        self.policy = Actor(config.state_dim, 
+                            config.action_dim, 
+                            config.hidden_actor, 
+                            config.activ_actor)
         
-        self.optim = config.optim(self.policy.parameters(), lr=config.lr)
+        self.value = Critic(config.state_dim, 
+                            config.hidden_critic, 
+                            config.activ_critic)
+        
+        self.optim_policy = config.optim_actor(self.policy.parameters(), 
+                                               lr=config.lr_actor)
+        self.optim_value = config.optim_critic(self.value.parameters(), 
+                                               lr=config.lr_critic)
         
         self.reset()
     
@@ -53,7 +113,7 @@ class PPOAgent:
     def act(self, state):
         self.policy.eval()
         with torch.no_grad():
-            action, _, _, _ = self.policy([state])
+            action, _, _ = self.policy([state])
         self.policy.train()
         
         return action.item()
@@ -72,7 +132,8 @@ class PPOAgent:
         masks = []
                 
         for _ in range(config.steps):
-            action, log_prob, entropy, value = self.policy(state)
+            action, log_prob, entropy = self.policy(state)
+            value = self.value(state)
             
             actions.append(action)
             log_probs.append(log_prob)
@@ -92,33 +153,36 @@ class PPOAgent:
                 break
         
         self.state = state
-        _, _, _, next_value = self.policy(state)
+        next_value = self.value(state)
 
         values.append(next_value)
         
         returns = []
         advantages = []
         
-        ret = next_value.detach()
+        R = next_value.detach()
         adv = torch.zeros((num_envs, 1))
         for i in reversed(range(len(rewards))):
-            # G = R + γV(s')
-            ret = rewards[i] + config.gamma * ret * masks[i]
+            reward = rewards[i]
+            value = values[i].detach()
             
             if config.use_gae:
-                value_hat = values[i+1].detach()
+                value_next = values[i+1].detach()
                 
-                # δ = R + γV(s') - V(s)
-                td_error = rewards[i] + config.gamma * value_hat * masks[i] - values[i].detach()
+                # δ = r + γV(s') - V(s)
+                delta = reward + config.gamma * value_next * masks[i] - value
                 
                 # GAE = δ' + λδ
-                adv = td_error + config.lamda * config.gamma * adv * masks[i]
+                adv = delta + config.lamda * config.gamma * adv * masks[i]
             else:
-                # A(s, a) = R + γV(s') - V(s)
-                adv = ret - values[i].detach()
+                # R = r + γV(s')
+                R = reward + config.gamma * R * masks[i]
+                
+                # A(s, a) = r + γV(s') - V(s)
+                adv = R - value
             
-            returns.insert(0, ret)
             advantages.insert(0, adv)
+            returns.insert(0, adv + value)
             
         log_probs = torch.cat(log_probs)
         values = torch.cat(values[:-1])
@@ -129,14 +193,17 @@ class PPOAgent:
         policy_loss = (-log_probs * advantages - config.ent_weight * entropies).mean()
         value_loss = F.mse_loss(values, returns)
         
-        loss = (policy_loss + config.val_loss_weight * value_loss)
+        self.optim_policy.zero_grad()
+        policy_loss.backward()
+#        nn.utils.clip_grad_norm_(self.policy.parameters(), config.grad_clip)
+        self.optim_policy.step()
         
-        self.optim.zero_grad()
-        loss.backward()
-        nn.utils.clip_grad_norm_(self.policy.parameters(), config.grad_clip)
-        self.optim.step()
+        self.optim_value.zero_grad()
+        value_loss.backward()
+#        nn.utils.clip_grad_norm_(self.value.parameters(), config.grad_clip)
+        self.optim_value.step()
         
-        return done.all(), value_loss, policy_loss, loss
+        return done.all(), value_loss, policy_loss#, loss
     
     def train(self):
         config = self.config
@@ -144,19 +211,17 @@ class PPOAgent:
         for i_episode in range(1, config.num_episodes+1):
             self.reset()   
             while self.total_steps <= config.max_steps:
-                done, value_loss, policy_loss, loss = self.step()
+                done, value_loss, policy_loss = self.step()
                 
                 if done:
                     break
             
             if i_episode % config.log_every == 0:
                 score = self.eval_episode()
-                
-                print('Episode {}\tValue loss: {:.2f}\tPolicy loss: {:.2f}\tLoss: {:.2f}\tScore: {:.2f}'\
+                print('Episode {}\tValue loss: {:.2f}\tPolicy loss: {:.2f}\tScore: {:.2f}'\
                       .format(i_episode, 
                               value_loss,
                               policy_loss, 
-                              loss, 
                               score))
                 
                 if score >= config.solved_with:
