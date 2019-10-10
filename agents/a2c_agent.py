@@ -1,4 +1,3 @@
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -9,8 +8,6 @@ from .device import device
 
 class A2CAgent:
     def __init__(self, config):
-        
-        super(A2CAgent, self).__init__()
         self.config = config
 
         self.policy = Actor(config.state_dim, 
@@ -35,7 +32,7 @@ class A2CAgent:
     def act(self, state):
         self.policy.eval()
         with torch.no_grad():
-            action, _, _ = self.policy([state])
+            action, _, _, _= self.policy([state])
         self.policy.train()
         
         return action.item()
@@ -46,6 +43,8 @@ class A2CAgent:
         num_envs = self.config.num_envs
         state = self.state
         
+        states = []
+        actions = []
         log_probs = []
         values = []
         entropies = []
@@ -53,9 +52,12 @@ class A2CAgent:
         masks = []
                 
         for _ in range(steps):
+            state = torch.FloatTensor(state).to(device)
             action, log_prob, entropy = self.policy(state)
             value = self.value(state)
             
+            states.append(state)
+            actions.append(action)
             log_probs.append(log_prob)
             entropies.append(entropy)
             values.append(value)
@@ -77,7 +79,7 @@ class A2CAgent:
         next_value = self.value(state)
         values.append(next_value)
         
-        return log_probs, values, entropies, rewards, masks
+        return log_probs, entropies, values, rewards, masks, states, actions
     
     def compute_return(self, values, rewards, masks):
         num_envs = self.config.num_envs
@@ -112,14 +114,28 @@ class A2CAgent:
         
         return returns
     
+    def update(self, policy_loss, value_loss):
+        grad_clip_actor = self.config.grad_clip_actor
+        grad_clip_critic = self.config.grad_clip_critic
+        
+        self.optim_policy.zero_grad()
+        policy_loss.backward()
+        
+        if grad_clip_actor is not None:
+            nn.utils.clip_grad_norm_(self.policy.parameters(), grad_clip_actor)
+        
+        self.optim_policy.step()
+        
+        self.optim_value.zero_grad()
+        value_loss.backward()
+        
+        if grad_clip_critic is not None:
+            nn.utils.clip_grad_norm_(self.value.parameters(), grad_clip_critic)
+        
+        self.optim_value.step()
+    
     def learn(self, log_probs, entropies, values, returns):
         ent_weight = self.config.ent_weight
-        grad_clip = self.config.grad_clip
-        
-        log_probs = torch.cat(log_probs)
-        entropies = torch.cat(entropies)
-        values = torch.cat(values[:-1])
-        returns = torch.cat(returns)
         
         # A(s, a) = r + γV(s') - V(s)
         advantages = returns - values.detach()
@@ -127,21 +143,13 @@ class A2CAgent:
         policy_loss = (-log_probs * advantages - ent_weight * entropies).mean()
         value_loss = F.mse_loss(values, returns)
         
-        self.optim_policy.zero_grad()
-        policy_loss.backward()
-        nn.utils.clip_grad_norm_(self.policy.parameters(), grad_clip)
-        self.optim_policy.step()
-        
-        self.optim_value.zero_grad()
-        value_loss.backward()
-        nn.utils.clip_grad_norm_(self.value.parameters(), grad_clip)
-        self.optim_value.step()
+        self.update(policy_loss, value_loss)
         
         return policy_loss, value_loss
     
     def step(self):
         
-        log_probs, values, entropies, rewards, masks = self.collect_data()
+        log_probs, entropies, values, rewards, masks, _, _ = self.collect_data()
         
         returns = self.compute_return(values, rewards, masks)
 

@@ -26,9 +26,14 @@ class Config:
     lr_actor = 0.001
     lr_critic = 0.001
     gamma = 0.99
+    ppo_clip = 0.2
+    ppo_epochs = 10
+    ppo_batch_size = 64
     ent_weight = 0.01
     val_loss_weight = 0.5
-    grad_clip = 0.5
+    grad_clip = None
+    grad_clip_actor = None
+    grad_clip_critic = None
     use_gae = False
     lamda = 0.95
     log_every = 100
