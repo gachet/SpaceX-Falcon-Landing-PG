@@ -32,7 +32,7 @@ class A2CAgent:
     def act(self, state):
         self.policy.eval()
         with torch.no_grad():
-            action, _, _, _= self.policy([state])
+            action, _, _= self.policy([state])
         self.policy.train()
         
         return action.item()
@@ -53,6 +53,7 @@ class A2CAgent:
                 
         for _ in range(steps):
             state = torch.FloatTensor(state).to(device)
+            
             action, log_prob, entropy = self.policy(state)
             value = self.value(state)
             
@@ -136,6 +137,11 @@ class A2CAgent:
     
     def learn(self, log_probs, entropies, values, returns):
         ent_weight = self.config.ent_weight
+        
+        log_probs = torch.cat(log_probs)
+        entropies = torch.cat(entropies)
+        values = torch.cat(values[:-1]) # we need to remove the last value
+        returns = torch.cat(returns)
         
         # A(s, a) = r + γV(s') - V(s)
         advantages = returns - values.detach()

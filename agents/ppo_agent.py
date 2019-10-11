@@ -23,6 +23,8 @@ class PPOAgent(A2CAgent):
                                              returns, 
                                              states, 
                                              actions)
+        
+        return value_loss, policy_loss
     
     def random_indices(self, len_states, shuffle=True):
         ppo_batch_size = self.config.ppo_batch_size
@@ -66,19 +68,19 @@ class PPOAgent(A2CAgent):
                 sampled_action = actions[batch_idx]
                 sampled_log_prob = log_probs[batch_idx, :]
                 sampled_advantage = advantages[batch_idx, :]
-                sampled_value = values[batch_idx, :]
                 sampled_return = returns[batch_idx, :]
 
                 _, new_log_prob, entropy = self.policy(sampled_state, sampled_action)
+                new_value = self.value(sampled_state)
                 
-                ratio = (new_log_prob - sampled_log_prob).exp()
+                ratio = (new_log_prob - sampled_log_prob.detach()).exp()
                 
                 surrogate_ratio = ratio * sampled_advantage
                 surrogate_clip = ratio.clamp(1.0 - ppo_clip, 1.0 + ppo_clip) * sampled_advantage
                 min_surrogate = torch.min(surrogate_ratio, surrogate_clip)
                 
                 policy_loss = (-min_surrogate - ent_weight * entropy).mean()
-                value_loss = F.mse_loss(sampled_value, sampled_return)
+                value_loss = F.mse_loss(new_value, sampled_return)
                 
                 self.update(policy_loss, value_loss)
         
