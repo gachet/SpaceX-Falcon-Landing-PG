@@ -11,37 +11,36 @@ from agents.ppo_agent import PPOAgent
 
 config = Config()
 
-config.num_envs = 5
-config.env_name = 'LunarLander-v2' # RocketLander-v0 | LunarLander-v2 | MountainCar-v0 | CartPole-v0
-config.env_solved = 200
-config.envs  = multi_env(config.env_name, config.num_envs)
-config.eval_env = gym.make(config.env_name)
-config.state_dim = config.envs.observation_space.shape[0]
-config.action_dim = config.envs.action_space.n
-config.num_episodes = 2000
-config.steps = 5
+config.env_name = 'RocketLander-v0' # RocketLander-v0 | LunarLander-v2 | MountainCar-v0 | CartPole-v0
+config.seed = 0
+config.num_agents = 5
+config.envs = multi_env(config.env_name, config.num_agents)
+config.num_episodes = 1000
+config.steps = 1000
+config.state_size = config.envs.observation_space.shape[0]
+config.action_size = config.envs.action_space.shape[0]
 config.activ_actor = F.relu
-config.activ_critic = F.relu
+config.lr_actor = 3e-4
+config.hidden_actor = (512, 512)
 config.optim_actor = Adam
+config.grad_clip_actor = 5
+config.activ_critic = F.relu
+config.lr_critic = 3e-4
+config.hidden_critic = (512, 512)
 config.optim_critic = Adam
-config.lr_actor = 0.001
-config.lr_critic = 0.001
+config.grad_clip_critic = 5
 config.gamma = 0.99
 config.ppo_clip = 0.2
-config.ppo_epochs = 4
-config.ppo_batch_size = 5
+config.ppo_epochs = 10
+config.ppo_batch_size = 32
 config.ent_weight = 0.01
-config.grad_clip_actor = None
-config.grad_clip_critic = None
+config.val_loss_weight = 1
 config.use_gae = True
 config.lamda = 0.95
-config.log_every = 100
-config.render_eval = True
-config.num_evals = 5
+config.env_solved = 1.0
+config.times_solved = 10
 
 #agent = A2CAgent(config)
 agent = PPOAgent(config)
 
 agent.train()
-
-torch.save(agent.policy.state_dict(), 'policy_weights.pth')

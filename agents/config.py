@@ -3,16 +3,13 @@ from torch.optim import RMSprop
 
 class Config:
     seed = 101
-    num_envs = 5
-    env_name = 'CartPole-v0'
-    env_solved = 195
-    envs = []
-    eval_env = None
+    num_agents = 0
+    envs = None
     num_episodes = 2000
     steps = 5
     max_steps = 1000
-    state_dim = 0
-    action_dim = 0
+    state_size = 0
+    action_size = 0
     hidden_units = (64, 64)
     hidden_actor = (64, 64)
     hidden_critic = (64, 64)
@@ -36,8 +33,6 @@ class Config:
     grad_clip_critic = None
     use_gae = False
     lamda = 0.95
-    log_every = 100
-    size_score = 100
-    render_eval = False
-    num_evals = 1
+    env_solved = 30
+    times_solved = 100
     
